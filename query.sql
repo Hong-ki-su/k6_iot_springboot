@@ -1,4 +1,4 @@
-  ### k5_iot_springboot >>> query ###
+ ### k5_iot_springboot >>> query ###
 
 # 1. 스키마 생성 (이미 존재하면 삭제)
 DROP DATABASE IF EXISTS k5_iot_springboot;
@@ -117,27 +117,70 @@ CREATE TABLE IF NOT EXISTS `users` (
 
 SELECT * FROM users;
 
-# 0827 (G_User_role)
--- 사용자 권한 테이블
-CREATE TABLE IF NOT EXISTS `user_roles` (
-	user_id BIGINT NOT NULL,
-    role VARCHAR(30) NOT NULL,
-
-    CONSTRAINT fk_user_roles_user
-		FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-	CONSTRAINT uk_user_roles UNIQUE (user_id, role),
-    
-    CONSTRAINT chk_user_roles_role CHECK (role IN ('USER', 'MANAGER', 'ADMIN'))
+# 0910 (G_Role)
+-- 권한 코드 테이블
+CREATE TABLE IF NOT EXISTS `roles` (
+	role_name VARCHAR(30) PRIMARY KEY
 ) ENGINE=InnoDB
   DEFAULT CHARSET = utf8mb4
   COLLATE = utf8mb4_unicode_ci
-  COMMENT = '사용자 권한';
+  COMMENT = '권한 코드(USER, MANAGER, OWNER 등)';
+  
+# 0910 (G_UserRoleId)
+-- 사용자-권한 매핑 (조인 엔티티)
+# DROP TABLE IF EXISTS `user_roles`; (기존의 user_roles 제거)
+CREATE TABLE IF NOT EXISTS `user_roles` (
+	user_id 	BIGINT NOT NULL,
+    role_name 	VARCHAR(30) NOT NULL,
+    PRIMARY KEY (user_id, role_name),
+    CONSTRAINT fk_user_roles_user FOREIGN KEY (user_id) REFERENCES users(id),
+    CONSTRAINT fk_user_roles_role FOREIGN KEY (role_name) REFERENCES roles(role_name)
+) ENGINE=InnoDB
+  DEFAULT CHARSET = utf8mb4
+  COLLATE = utf8mb4_unicode_ci
+  COMMENT = '사용자 권한 매핑';
+  
+## 권한 데이터 삽입 ##
+INSERT INTO roles (role_name) VALUES
+	('USER'),
+    ('MANAGER'),
+    ('ADMIN')
+    # 이미 값이 있는 경우(DUPLICATE, 중복)
+    # , 에러 대신 그대로 유지할 것을 설정 
+    ON DUPLICATE KEY UPDATE role_name = VALUES(role_name);
+    
+SELECT * FROM roles;
+
+## 사용자 권한 매핑 삽입 ##
+INSERT INTO user_roles (user_id, role_name) VALUES
+	(1, 'USER'),
+    (2, 'USER'),
+    (2, 'MANAGER'),
+    (3, 'MANAGER'),
+    (3, 'ADMIN')
+    ON DUPLICATE KEY UPDATE role_name = VALUES(role_name);
+    
+SELECT * FROM user_roles;
+
+##### 사용하지 않음 #####
+# : 위의 사용자-권한 다대다 형식 사용 권장
+# 0827 (G_User_role)
+-- 사용자 권한 테이블
+-- CREATE TABLE IF NOT EXISTS `user_roles` (
+-- 	user_id BIGINT NOT NULL,
+--     role VARCHAR(30) NOT NULL,
+
+--     CONSTRAINT fk_user_roles_user
+-- 		FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+-- 	CONSTRAINT uk_user_roles UNIQUE (user_id, role),
+--     
+--     CONSTRAINT chk_user_roles_role CHECK (role IN ('USER', 'MANAGER', 'ADMIN'))
+-- ) ENGINE=InnoDB
+--   DEFAULT CHARSET = utf8mb4
+--   COLLATE = utf8mb4_unicode_ci
+--   COMMENT = '사용자 권한';
 
 SELECT * FROM `user_roles`;
-
-# 샘플데이터 #
-INSERT INTO user_roles (user_id, role)
-VALUES (5, "ADMIN");
 
 # 0828 (H_Article)
 -- 기사 테이블
@@ -290,7 +333,7 @@ SELECT
     p.name					AS product_name,
     oi.quantity				AS quantity,
     p.price					AS price,
-    CAST((oi.quantity * p.price) AS SIGNED) AS total_price,
+    CAST((oi.quantity * p.price) AS SIGNED) AS total_price, -- BIGINT로 고정
     o.created_at			AS ordered_at
 FROM
 	orders o
@@ -303,8 +346,8 @@ SELECT
 	o.id						AS order_id,
     o.user_id					AS user_id,
     o.order_status				AS order_status,
-    CAST(SUM(oi.quantity * p.price) AS SIGNED) AS order_total_amount,
-    CAST(SUM(oi.quantity) AS SIGNED) AS order_total_qty,
+    CAST(SUM(oi.quantity * p.price) AS SIGNED)	AS order_total_amount, -- BIGINT로 고정
+    CAST(SUM(oi.quantity) AS SIGNED)			AS order_total_qty,    -- BIGINT로 고정
     MIN(o.created_at)			AS ordered_at
 FROM
     orders o
@@ -350,12 +393,11 @@ SELECT * FROM `order_logs`;
 USE k5_iot_springboot;
 
 CREATE TABLE notice (
-id BIGINT AUTO_INCREMENT PRIMARY KEY,
-title VARCHAR(255) NOT NULL,
-content TEXT NOT NULL,
-author VARCHAR(100) NOT NULL,
-created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+	id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    title VARCHAR(255) NOT NULL,
+    content TEXT NOT NULL,
+    author VARCHAR(100) NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
 SELECT * FROM notice;
-

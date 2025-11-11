@@ -18,7 +18,7 @@ public class NoticeService {
                 .title(title)
                 .content(content)
                 .author(author)
-                .createAt(LocalDateTime.now())
+                .createdAt(LocalDateTime.now())
                 .build();
 
         return noticeRepository.save(notice);

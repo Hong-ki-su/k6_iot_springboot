@@ -10,34 +10,34 @@ import javax.crypto.SecretKey;
 import java.util.*;
 
 /*
-* === JwtProvider ===
-* : JWT(JSON Web Token) 토큰을 생성하고 검증하는 역할
-*       >> 로그인 후 서버가 만들어서 클라이언트(브라우저)에게 전달하는 문자열 토큰
-*
-* cf) JWT
-*   : 사용자 정보를 암호화된 토큰으로 저장
-*   - (클라이언트가) 서버에 요청할 때마다 전달 가능 (사용자 정보 확인용, Authorization: Bearer <토큰>)
-*   - 서버는 토큰을 검증하여 누가 요청했는지 판단
-*   >> 주로 로그인 인증에 사용
-*
-*   +) JWT 구조
-*       - header: 어떤 알고리즘으로 서명했는지
-*       - payload: 사용자 정보 (예: username-로그인아이디, roles-권한)
-*       - signature: 토큰 변조 방지용 서명
-*
-*   +) HS256 암호화 알고리즘 사용한 JWT 서명
-*       - 비밀키는 Base64로 인코딩 지정
-*       - JWT 만료 기간은 10시간으로 지정
-*           >> 환경 변수 설정 (jwt.secret / jwt.expiration)
-*
-*   # JwtProvider 클래스 전체 역할 #
-*   1) 토큰 생성(발급)                                - generateJwtToken 메서드
-*   2) Bearer 제거                                   - removeBearer 메서드
-*   3) 토큰 검증/파싱                                 - parseClaimsInternal 메서드
-*   4) payload에 저장된 데이터 추출 (username, roles)  - getUsernameFromJwt, getRolesFromJwt 메서드
-*   5) 만료까지 남은 시간 계산                         - getRemainingMillis 메서드
-*
-* */
+ * === JwtProvider ===
+ * : JWT(JSON Web Token) 토큰을 생성하고 검증하는 역할
+ *       >> 로그인 후 서버가 만들어서 클라이언트(브라우저)에게 전달하는 문자열 토큰
+ *
+ * cf) JWT
+ *   : 사용자 정보를 암호화된 토큰으로 저장
+ *   - (클라이언트가) 서버에 요청할 때마다 전달 가능 (사용자 정보 확인용, Authorization: Bearer <토큰>)
+ *   - 서버는 토큰을 검증하여 누가 요청했는지 판단
+ *   >> 주로 로그인 인증에 사용
+ *
+ *   +) JWT 구조
+ *       - header: 어떤 알고리즘으로 서명했는지
+ *       - payload: 사용자 정보 (예: username-로그인아이디, roles-권한)
+ *       - signature: 토큰 변조 방지용 서명
+ *
+ *   +) HS256 암호화 알고리즘 사용한 JWT 서명
+ *       - 비밀키는 Base64로 인코딩 지정
+ *       - JWT 만료 기간은 10시간으로 지정
+ *           >> 환경 변수 설정 (jwt.secret / jwt.expiration)
+ *
+ *   # JwtProvider 클래스 전체 역할 #
+ *   1) 토큰 생성(발급)                                - generateJwtToken 메서드
+ *   2) Bearer 제거                                   - removeBearer 메서드
+ *   3) 토큰 검증/파싱                                 - parseClaimsInternal 메서드
+ *   4) payload에 저장된 데이터 추출 (username, roles)  - getUsernameFromJwt, getRolesFromJwt 메서드
+ *   5) 만료까지 남은 시간 계산                         - getRemainingMillis 메서드
+ *
+ * */
 @Component
 // cf) @Component(클래스 레벨 선언) - 스프링 런타임 시 컴포넌트 스캔을 통해 자동으로 빈을 찾고 등록 (의존성 주입)
 //     @Bean(메서드 레벨 선언) - 반환되는 객체를 개발자가 수동으로 빈 등록
@@ -53,6 +53,7 @@ public class JwtProvider {
     // 환경 변수에 지정한 비밀키와 만료 시간 저장 변수 선언
     private final SecretKey key;
     private final long jwtExpirationMs;
+    private final long jwtRefreshExpirationMs;
     private final long jwtEmailExpirationMs;
     private final int clockSkewSeconds;
 
@@ -65,6 +66,7 @@ public class JwtProvider {
             //          >> 데이터 타입 자동 인식
             @Value("${jwt.secret}") String secret, // cf) Base64 인코딩된 비밀키 문자열이어야 함!
             @Value("${jwt.expiration}") long jwtExpirationMs,
+            @Value("${jwt.refresh-expiration}") long jwtRefreshExpirationMs,
             @Value("${jwt.email-expiration}") long jwtEmailExpirationMs,
             @Value("${jwt.clock-skew-seconds:0}") int clockSkewSeconds // 기본 0 - 옵션
     ) {
@@ -81,6 +83,7 @@ public class JwtProvider {
         // HMAC-SHA 알고리즘으로 암호화된 키 생성
         this.key = Keys.hmacShaKeyFor(secretBytes); // HMAC-SHA용 SecretKey 객체 생성
         this.jwtExpirationMs = jwtExpirationMs;
+        this.jwtRefreshExpirationMs = jwtRefreshExpirationMs;
         this.jwtEmailExpirationMs = jwtEmailExpirationMs;
         this.clockSkewSeconds = Math.max(clockSkewSeconds, 0); // 음수 방지
 
@@ -94,15 +97,27 @@ public class JwtProvider {
      * ============== */
 
     /**
-     * 엑세스 토큰 생성
+     * 엑세스(Access) 토큰 생성
      * @param username  sub(Subject)에 저장할 사용자 식별자
      * @param roles     권한 목록(중복 제거용 Set 권장) - JSON 배열로 직렬화
      *
      * subject=sub(username), roles는 커스텀 클레임 */
     public String generateJwtToken(String username, Set<String> roles) {
+        return buildToken(username, roles, jwtExpirationMs);
+    }
+
+    /*
+     * 리프레시(Refresh) 토큰 생성
+     * */
+    public String generateRefreshToken(String username, Set<String> roles) {
+        return buildToken(username, roles, jwtRefreshExpirationMs);
+    }
+
+    /** 공통 빌드 로직 (Access + Refresh) */
+    private String buildToken(String username, Set<String> roles, long expirationMs) {
         long now = System.currentTimeMillis();
         Date iat = new Date(now);
-        Date exp = new Date(now + jwtExpirationMs);
+        Date exp = new Date(now + expirationMs);
 
         // List로 변환하여 직렬화 시 타입 안정성 확보
         List<String> roleList = (roles == null) ? List.of() : new ArrayList<>(roles);

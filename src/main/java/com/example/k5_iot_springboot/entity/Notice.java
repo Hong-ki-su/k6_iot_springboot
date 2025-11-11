@@ -19,5 +19,5 @@ public class Notice {
     private String title;
     private String content;
     private String author;
-    private LocalDateTime createAt;
+    private LocalDateTime createdAt;
 }
