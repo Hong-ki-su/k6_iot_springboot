@@ -1,6 +1,7 @@
 package com.example.k5_iot_springboot.handler;
 
 import com.example.k5_iot_springboot.common.enums.ErrorCode;
+import com.example.k5_iot_springboot.common.errors.BusinessException;
 import com.example.k5_iot_springboot.common.errors.ErrorResponse;
 import com.example.k5_iot_springboot.common.errors.FieldErrorItem;
 import com.example.k5_iot_springboot.dto.ResponseDto;
@@ -102,6 +103,22 @@ public class GlobalExceptionHandler {
         log.warn("Not Found: {}", e.getMessage());
         return fail(ErrorCode.NOT_FOUND, null, null);
     }
+
+    @ExceptionHandler(BusinessException.class)
+    public ResponseEntity<ResponseDto<Object>> handleBusiness(BusinessException e) {
+        ErrorCode code = e.getErrorCode();
+        String reason = (e.getReason() != null && !e.getReason().isBlank())
+                ? e.getReason()
+                : null; // null이면 defaultMessage 사용
+        log.warn("Business error [{}]: {}", code.name(), e.getMessage());
+        return fail(code, reason, null);
+    }
+
+    // == serviceImpl에서 사용 == //
+//    if (projectId == null) {
+//        // 잘못된 요청 → 400
+//        throw new BusinessException(BAD_REQUEST, "PROJECT_ID_REQUIRED");
+//    }
 
     // === 409 Conflict: 무결성 위반(중복/제약조건) === //
     @ExceptionHandler(DataIntegrityViolationException.class) // Unique 키 충돌, FK 위반 등

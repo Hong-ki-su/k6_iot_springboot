@@ -9,8 +9,8 @@ import java.time.LocalDateTime;
 @Table(name = "notice")
 @NoArgsConstructor
 @Setter
-@AllArgsConstructor
 @Getter
+@AllArgsConstructor
 @Builder
 public class Notice {
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)

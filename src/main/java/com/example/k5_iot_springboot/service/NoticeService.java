@@ -3,6 +3,7 @@ package com.example.k5_iot_springboot.service;
 import com.example.k5_iot_springboot.entity.Notice;
 import com.example.k5_iot_springboot.repository.NoticeRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.cglib.core.Local;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -30,7 +31,7 @@ public class NoticeService {
 
     public Notice getById(Long id) {
         return noticeRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("해당 id의 공지를 찾을 수 없습니다"));
+                .orElseThrow(() -> new IllegalArgumentException("해당 id의 공지를 찾을 수 없습니다."));
     }
 
     public void delete(Long id) {

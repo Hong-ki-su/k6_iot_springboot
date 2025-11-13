@@ -11,19 +11,19 @@ import lombok.*;
 @AllArgsConstructor
 @Table(name = "refresh_tokens")
 public class RefreshToken {
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+
+    @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    /*로그인 아이디*/
+    /* 로그인 아이디 */
     @Column(nullable = false, unique = true)
     private String username;
 
-    // Refresh token 문자열
+    /* refresh token 문자열 */
     @Column(nullable = false, unique = true, length = 512)
     private String token;
 
-    // 만료 시각(밀리초 단위)
+    /* 만료 시각 (밀리초 단위) */
     @Column(nullable = false)
     private Long expiry;
 }

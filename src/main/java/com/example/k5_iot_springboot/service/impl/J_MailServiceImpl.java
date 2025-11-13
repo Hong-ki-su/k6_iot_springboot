@@ -12,7 +12,6 @@ import org.springframework.mail.MailException;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.stereotype.Service;
 
-
 @Service
 @RequiredArgsConstructor
 public class J_MailServiceImpl implements J_MailService {
@@ -22,7 +21,6 @@ public class J_MailServiceImpl implements J_MailService {
 
     @Value("${spring.mail.username}")
     private String senderEmail;
-
 
     private MimeMessage createEmail(String email, String token) throws MessagingException {
         // 메일 내용을 생성하는 메서드

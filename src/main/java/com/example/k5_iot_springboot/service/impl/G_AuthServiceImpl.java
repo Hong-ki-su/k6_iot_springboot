@@ -89,6 +89,7 @@ public class G_AuthServiceImpl implements G_AuthService {
      *
      * */
     @Override // 읽기 전용
+    @Transactional
     public ResponseDto<SignInResponse> signIn(SignInRequest req, HttpServletResponse response) {
 
         // 스프링 시큐리티 표준 인증 흐름 (UserDetailsService + PasswordEnoder)
@@ -116,6 +117,7 @@ public class G_AuthServiceImpl implements G_AuthService {
         // +) Refresh Token 저장 (기존의 토큰 삭제 후 신규 저장)
         long expiry = System.currentTimeMillis() + 7 * 24 * 60 * 60 * 1000L; // 7일 뒤 만료
         refreshTokenRepository.deleteByUsername(req.loginId());
+        refreshTokenRepository.flush(); // DB에 즉시 반영
         refreshTokenRepository.save(
                 RefreshToken.builder()
                         .username(req.loginId())
@@ -127,9 +129,10 @@ public class G_AuthServiceImpl implements G_AuthService {
         // +) Refresh Token 쿠키 설정
         Cookie cookie = new Cookie("refreshToken", refreshToken);
         cookie.setHttpOnly(true);
-        // cookie.setSecure(true);
+        cookie.setSecure(false);
         cookie.setPath("/");
         cookie.setMaxAge((int)(7 * 24 * 60 * 60));
+        cookie.setAttribute("SameSite", "None");
         response.addCookie(cookie);
 
         // 4) 만료 시각 추출하여 응답에 포함
@@ -158,17 +161,19 @@ public class G_AuthServiceImpl implements G_AuthService {
 
             // 2) Refresh Token의 subject(=username) 추출
             String username = jwtProvider.getUsernameFromJwt(refreshToken);
-
             // 3) DB에 저장된 Refresh Token과 일치하는지 확인
             Optional<RefreshToken> savedToken = refreshTokenRepository.findByUsername(username);
+            System.out.println("요청으로 들어온 token: " + refreshToken);
+            System.out.println("저장된 token: " + savedToken.get().getToken());
             if (savedToken.isEmpty() || !savedToken.get().getToken().equals(refreshToken)) {
                 throw new IllegalArgumentException("Refresh Token이 서버에 등록된 것과 일치하지 않습니다.");
             }
 
+            System.out.println("3");
             // 4) 새 AccessToken 발급
             Set<String> roles = jwtProvider.getRolesFromJwt(refreshToken);
             String newAccessToken = jwtProvider.generateJwtToken(username, roles);
-
+            System.out.println("4");
             return newAccessToken;
 
         } catch (ExpiredJwtException e) {
@@ -178,6 +183,7 @@ public class G_AuthServiceImpl implements G_AuthService {
     }
 
     @Override
+    @Transactional
     public void deleteRefreshToken(UserPrincipal userPrincipal) {
         refreshTokenRepository.deleteByUsername(userPrincipal.getUsername());
     }
